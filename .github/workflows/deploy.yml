@@ -33,6 +33,9 @@ jobs:
       - run: pnpm build
 
       - uses: actions/configure-pages@v5
+        with:
+          # 试着自动把 Pages 打开成 “GitHub Actions” 来源，省得手动去 Settings 点
+          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
