@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowRight, Check, Cloud, KeyRound, Loader2, ScanLine, ShieldCheck } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  Cloud,
+  CloudOff,
+  KeyRound,
+  Loader2,
+  ScanLine,
+  ShieldCheck,
+} from "lucide-react";
 import { checkPassword, gateChannel, markUnlocked, newSessionId } from "../lib/gate";
 import { errorText } from "../lib/errors";
 import { urlFor } from "../lib/router";
@@ -32,10 +41,6 @@ export function Gate({ onUnlocked, onOpenSettings }: Props) {
 
   // 生成二维码
   useEffect(() => {
-    if (mode !== "cloud") {
-      setQr(null);
-      return;
-    }
     let alive = true;
     // 二维码库只在需要时加载，别拖慢首屏
     void import("qrcode")
@@ -60,11 +65,6 @@ export function Gate({ onUnlocked, onOpenSettings }: Props) {
 
   // 建立会话并监听手机端的确认
   useEffect(() => {
-    if (mode !== "cloud") {
-      setPhase("waiting");
-      setCreateError(null);
-      return;
-    }
     let cancelled = false;
     const channel = gateChannel(cloudConfig);
 
@@ -187,35 +187,22 @@ export function Gate({ onUnlocked, onOpenSettings }: Props) {
               <p className="mt-5 text-[19px] font-extrabold">已通过口令验证</p>
               <p className="mt-1 text-[13.5px] text-ink-2">正在进入点名台…</p>
             </div>
-          ) : needsCloud ? (
-            <div className="py-2">
-              <div className="flex items-center gap-2.5">
-                <Cloud size={19} style={{ color: "var(--color-brand)" }} />
-                <h2 className="text-[18px] font-extrabold">先连接云端</h2>
-              </div>
-              <p className="mt-3 text-[13.5px] leading-relaxed text-ink-2">
-                手机扫码需要云端中转。填好 Supabase 之后，二维码就会出现在这里，手机只要联网就能通过。
-              </p>
-              <button
-                type="button"
-                onClick={onOpenSettings}
-                className="press mt-5 inline-flex w-full items-center justify-center gap-2 rounded-[14px] px-4 py-3.5 text-[15px] font-bold text-white"
-                style={{ background: "var(--color-brand)" }}
-              >
-                <Cloud size={17} />
-                填写 Supabase 配置
-              </button>
-            </div>
           ) : (
             <>
               <div className="flex items-center justify-between gap-3">
-                <h2 className="text-[17px] font-extrabold">微信扫码</h2>
+                <h2 className="text-[17px] font-extrabold">
+                  {needsCloud ? "扫码预览" : "微信扫码"}
+                </h2>
                 <span
                   className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-bold"
-                  style={{ background: "#e7f6ee", color: "#186b48" }}
+                  style={
+                    needsCloud
+                      ? { background: "#f1eff4", color: "var(--color-ink-2)" }
+                      : { background: "#e7f6ee", color: "#186b48" }
+                  }
                 >
-                  <ShieldCheck size={13} />
-                  云端已连接
+                  {needsCloud ? <CloudOff size={13} /> : <ShieldCheck size={13} />}
+                  {needsCloud ? "本机模式" : "云端已连接"}
                 </span>
               </div>
 
@@ -254,6 +241,22 @@ export function Gate({ onUnlocked, onOpenSettings }: Props) {
                 <p className="mt-3 rounded-[12px] bg-[#fdecef] px-3 py-2 text-[12.5px] leading-relaxed text-[#9f1239]">
                   连接云端失败：{createError}
                 </p>
+              ) : null}
+
+              {needsCloud ? (
+                <div className="mt-4 rounded-[12px] bg-[#fff6e6] px-3 py-2.5">
+                  <p className="text-[12.5px] font-semibold leading-relaxed text-[#7a4a10]">
+                    本机模式下二维码只在同一台设备有效，方便先看流程。连上云端之后，手机微信扫码才能真正通过。
+                  </p>
+                  <button
+                    type="button"
+                    onClick={onOpenSettings}
+                    className="pill mt-2.5 !text-[12px]"
+                  >
+                    <Cloud size={13} />
+                    填写 Supabase 配置
+                  </button>
+                </div>
               ) : null}
             </>
           )}
