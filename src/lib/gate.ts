@@ -80,10 +80,13 @@ function cloudChannel(config: CloudConfig): GateChannel {
   return {
     remote: true,
     async create(id) {
+      // ignoreDuplicates 会生成 ON CONFLICT DO NOTHING，不碰 UPDATE 权限
+      //（login_sessions 刻意只允许服务端函数改状态）。
+      // React 开发模式会把 effect 跑两遍，第二次撞主键属正常，直接忽略。
       const { error } = await client
         .from("login_sessions")
-        .upsert({ id, status: "pending" }, { onConflict: "id" });
-      if (error) throw error;
+        .upsert({ id, status: "pending" }, { onConflict: "id", ignoreDuplicates: true });
+      if (error && error.code !== "23505") throw error;
     },
     async submit(id, password) {
       const { data, error } = await client.rpc("verify_gate_password", {
