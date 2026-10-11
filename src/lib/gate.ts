@@ -4,12 +4,25 @@ import type { CloudConfig } from "./types";
 export const GATE_PASSWORD = "666";
 export type GateStatus = "pending" | "approved";
 
+/**
+ * 口令校验的结果。
+ * 云端由 Postgres 函数 verify_gate_password 返回，前端拿不到口令本身。
+ */
+export type GateResult = "ok" | "wrong" | "locked" | "missing" | "error";
+
+/**
+ * 电脑端「手机不在身边」的手动口令入口。
+ * 觉得不够严就改成 false，之后只有手机扫码能进门。
+ */
+export const ALLOW_DESKTOP_PASSWORD_FALLBACK = true;
+
 const LOCAL_PREFIX = "rc:gate:local:";
 
 export interface GateChannel {
   readonly remote: boolean;
   create(id: string): Promise<void>;
-  approve(id: string): Promise<void>;
+  /** 提交口令。云端会在服务端校验，前端不保存口令。 */
+  submit(id: string, password: string): Promise<GateResult>;
   watch(id: string, onStatus: (status: GateStatus) => void): () => void;
   read(id: string): Promise<GateStatus>;
 }
@@ -29,9 +42,12 @@ function localChannel(): GateChannel {
     async create(id) {
       localStorage.setItem(LOCAL_PREFIX + id, "pending");
     },
-    async approve(id) {
+    // 本机模式没有服务端，只能在前端比对（仅用于本地预览流程）
+    async submit(id, password) {
+      if (!checkPassword(password)) return "wrong";
       localStorage.setItem(LOCAL_PREFIX + id, "approved");
       window.dispatchEvent(new StorageEvent("storage", { key: LOCAL_PREFIX + id }));
+      return "ok";
     },
     watch(id, onStatus) {
       const check = () => {
@@ -69,12 +85,20 @@ function cloudChannel(config: CloudConfig): GateChannel {
         .upsert({ id, status: "pending" }, { onConflict: "id" });
       if (error) throw error;
     },
-    async approve(id) {
-      const { error } = await client
-        .from("login_sessions")
-        .update({ status: "approved", approved_at: new Date().toISOString() })
-        .eq("id", id);
-      if (error) throw error;
+    async submit(id, password) {
+      const { data, error } = await client.rpc("verify_gate_password", {
+        p_session: id,
+        p_password: password,
+      });
+      if (error) {
+        throw new Error(error.message);
+      }
+      const result = typeof data === "string" ? data : "";
+      if (result === "ok") return "ok";
+      if (result === "wrong") return "wrong";
+      if (result === "locked") return "locked";
+      if (result === "missing") return "missing";
+      throw new Error(`服务端返回了意外结果：${String(data)}`);
     },
     watch(id, onStatus) {
       let done = false;

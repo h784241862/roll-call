@@ -11,8 +11,17 @@ function readEnvConfig(): CloudConfig | null {
   return null;
 }
 
-/** 环境变量优先，其次是在设置面板里保存到本机的配置。 */
+/**
+ * 构建时的环境变量优先。
+ *
+ * 这一点很关键：手机扫码打开的是另一个浏览器，它读不到电脑上存的设置，
+ * 所以线上必须靠构建时注入的配置，两端才会连到同一个 Supabase。
+ * 本机手填的设置只在开发调试时兜底。
+ */
 export function loadCloudConfig(): CloudConfig | null {
+  const fromEnv = readEnvConfig();
+  if (fromEnv) return fromEnv;
+
   try {
     const raw = localStorage.getItem(CLOUD_KEY);
     if (raw) {
@@ -29,7 +38,12 @@ export function loadCloudConfig(): CloudConfig | null {
   } catch {
     /* 坏数据按未配置处理 */
   }
-  return readEnvConfig();
+  return null;
+}
+
+/** 构建时是否已经固定了配置。固定之后设置面板变成只读。 */
+export function hasEnvConfig(): boolean {
+  return readEnvConfig() !== null;
 }
 
 export function saveCloudConfig(config: CloudConfig | null): void {

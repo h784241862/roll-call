@@ -9,5 +9,7 @@ export default defineConfig({
   build: {
     outDir: "dist",
     target: "es2022",
+    // supabase-js 本身就占了大部分体积，单页工具没必要按默认的 500kB 报警
+    chunkSizeWarningLimit: 700,
   },
 });

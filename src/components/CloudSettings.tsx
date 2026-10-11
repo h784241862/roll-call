@@ -1,33 +1,8 @@
 import { useEffect, useState } from "react";
-import { Check, Copy, Cloud, CloudOff, Database, X } from "lucide-react";
+import { Check, Copy, Cloud, CloudOff, Database, Lock, X } from "lucide-react";
+import schemaSql from "../../supabase/schema.sql?raw";
+import { hasEnvConfig } from "../lib/config";
 import { useStore } from "../lib/store";
-
-const SQL = `-- 在 Supabase 的 SQL Editor 里整段执行一次
-create table if not exists public.hearts (
-  id uuid primary key default gen_random_uuid(),
-  student_id text not null,
-  created_at timestamptz not null default now()
-);
-
-create table if not exists public.login_sessions (
-  id uuid primary key,
-  status text not null default 'pending',
-  created_at timestamptz not null default now(),
-  approved_at timestamptz
-);
-
-alter table public.hearts enable row level security;
-alter table public.login_sessions enable row level security;
-
-create policy "hearts read"   on public.hearts          for select using (true);
-create policy "hearts add"    on public.hearts          for insert with check (true);
-create policy "hearts remove" on public.hearts          for delete using (true);
-create policy "gate read"     on public.login_sessions  for select using (true);
-create policy "gate create"   on public.login_sessions  for insert with check (true);
-create policy "gate approve"  on public.login_sessions  for update using (true);
-
-alter publication supabase_realtime add table public.hearts;
-alter publication supabase_realtime add table public.login_sessions;`;
 
 interface Props {
   open: boolean;
@@ -40,6 +15,7 @@ export function CloudSettings({ open, onClose }: Props) {
   const [key, setKey] = useState("");
   const [copied, setCopied] = useState(false);
   const [showSql, setShowSql] = useState(false);
+  const fixedByBuild = hasEnvConfig();
 
   useEffect(() => {
     if (open) {
@@ -62,7 +38,7 @@ export function CloudSettings({ open, onClose }: Props) {
 
   const copySql = async () => {
     try {
-      await navigator.clipboard.writeText(SQL);
+      await navigator.clipboard.writeText(schemaSql);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1600);
     } catch {
@@ -104,30 +80,48 @@ export function CloudSettings({ open, onClose }: Props) {
           {mode === "cloud" ? "已连接云端" : "当前是本机模式，数据只存在这台电脑上"}
         </div>
 
-        <label className="mt-5 block text-[13px] font-bold text-ink-2" htmlFor="sb-url">
-          Project URL
-        </label>
-        <input
-          id="sb-url"
-          value={url}
-          onChange={(event) => setUrl(event.target.value)}
-          placeholder="https://xxxxxxxx.supabase.co"
-          spellCheck={false}
-          className="mt-2 w-full rounded-[12px] border border-line bg-canvas px-3.5 py-2.5 text-[14px] outline-none transition-colors focus:border-brand focus:bg-paper"
-        />
+        {fixedByBuild ? (
+          <div className="mt-4 rounded-[12px] border border-line bg-canvas p-3.5">
+            <p className="flex items-center gap-1.5 text-[13px] font-bold text-ink-2">
+              <Lock size={14} />
+              已由构建配置固定
+            </p>
+            <p className="mt-2 font-mono text-[12px] break-all text-ink-2">
+              {cloudConfig?.url ?? "（未读到 URL）"}
+            </p>
+            <p className="mt-2 text-[12px] leading-relaxed text-ink-3">
+              手机和电脑连的是同一个 Supabase，这样扫码才能同步。要换项目请改构建时的
+              VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY 后重新部署。
+            </p>
+          </div>
+        ) : (
+          <>
+            <label className="mt-5 block text-[13px] font-bold text-ink-2" htmlFor="sb-url">
+              Project URL
+            </label>
+            <input
+              id="sb-url"
+              value={url}
+              onChange={(event) => setUrl(event.target.value)}
+              placeholder="https://xxxxxxxx.supabase.co"
+              spellCheck={false}
+              className="mt-2 w-full rounded-[12px] border border-line bg-canvas px-3.5 py-2.5 text-[14px] outline-none transition-colors focus:border-brand focus:bg-paper"
+            />
 
-        <label className="mt-4 block text-[13px] font-bold text-ink-2" htmlFor="sb-key">
-          anon public key
-        </label>
-        <textarea
-          id="sb-key"
-          value={key}
-          onChange={(event) => setKey(event.target.value)}
-          placeholder="eyJhbGciOi..."
-          spellCheck={false}
-          rows={3}
-          className="mt-2 w-full resize-none rounded-[12px] border border-line bg-canvas px-3.5 py-2.5 font-mono text-[12.5px] leading-relaxed outline-none transition-colors focus:border-brand focus:bg-paper"
-        />
+            <label className="mt-4 block text-[13px] font-bold text-ink-2" htmlFor="sb-key">
+              anon public key
+            </label>
+            <textarea
+              id="sb-key"
+              value={key}
+              onChange={(event) => setKey(event.target.value)}
+              placeholder="eyJhbGciOi..."
+              spellCheck={false}
+              rows={3}
+              className="mt-2 w-full resize-none rounded-[12px] border border-line bg-canvas px-3.5 py-2.5 font-mono text-[12.5px] leading-relaxed outline-none transition-colors focus:border-brand focus:bg-paper"
+            />
+          </>
+        )}
 
         <button
           type="button"
@@ -152,11 +146,12 @@ export function CloudSettings({ open, onClose }: Props) {
               </button>
             </div>
             <pre className="thin-scroll mt-2 max-h-[220px] overflow-auto font-mono text-[11.5px] leading-relaxed text-ink-2">
-              {SQL}
+              {schemaSql}
             </pre>
           </div>
         ) : null}
 
+        {fixedByBuild ? null : (
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <button
             type="button"
@@ -185,6 +180,7 @@ export function CloudSettings({ open, onClose }: Props) {
             </button>
           ) : null}
         </div>
+        )}
       </div>
     </div>
   );

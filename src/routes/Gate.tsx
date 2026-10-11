@@ -10,7 +10,12 @@ import {
   ShieldCheck,
   Smartphone,
 } from "lucide-react";
-import { checkPassword, gateChannel, markUnlocked, newSessionId } from "../lib/gate";
+import {
+  ALLOW_DESKTOP_PASSWORD_FALLBACK,
+  gateChannel,
+  markUnlocked,
+  newSessionId,
+} from "../lib/gate";
 import { errorText } from "../lib/errors";
 import { urlFor } from "../lib/router";
 import { useStore } from "../lib/store";
@@ -30,11 +35,16 @@ export function Gate({ onUnlocked, onOpenSettings }: Props) {
   const [showManual, setShowManual] = useState(false);
   const [manual, setManual] = useState("");
   const [manualError, setManualError] = useState(false);
+  const [manualNote, setManualNote] = useState<string | null>(null);
+  const [manualBusy, setManualBusy] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const doneRef = useRef(false);
 
   const finish = useCallback(() => {
+    if (doneRef.current) return;
+    doneRef.current = true;
     markUnlocked();
     setPhase("approved");
     window.setTimeout(onUnlocked, 620);
@@ -99,13 +109,34 @@ export function Gate({ onUnlocked, onOpenSettings }: Props) {
     if (showManual) inputRef.current?.focus();
   }, [showManual]);
 
-  const submitManual = () => {
-    if (checkPassword(manual)) {
-      finish();
-    } else {
+  const submitManual = async () => {
+    if (manualBusy) return;
+    setManualBusy(true);
+    setManualError(false);
+    setManualNote(null);
+    try {
+      const result = await gateChannel(cloudConfig).submit(sessionId, manual);
+      if (result === "ok") {
+        finish();
+        return;
+      }
+      if (result === "locked") {
+        setManualNote("试错次数太多，这条链接已失效。刷新页面重新生成二维码即可。");
+        setManual("");
+        return;
+      }
+      if (result === "missing") {
+        setManualNote("这个二维码已经过期或无效。刷新页面重新生成即可。");
+        setManual("");
+        return;
+      }
       setManualError(true);
       setManual("");
       inputRef.current?.focus();
+    } catch (error) {
+      setManualNote(errorText(error));
+    } finally {
+      setManualBusy(false);
     }
   };
 
@@ -270,7 +301,7 @@ export function Gate({ onUnlocked, onOpenSettings }: Props) {
             </>
           )}
 
-          {phase !== "approved" ? (
+          {ALLOW_DESKTOP_PASSWORD_FALLBACK && phase !== "approved" ? (
             <div className="mt-6 border-t border-line pt-5">
               {showManual ? (
                 <div>
@@ -290,7 +321,7 @@ export function Gate({ onUnlocked, onOpenSettings }: Props) {
                         setManualError(false);
                       }}
                       onKeyDown={(event) => {
-                        if (event.key === "Enter") submitManual();
+                        if (event.key === "Enter") void submitManual();
                       }}
                       aria-invalid={manualError}
                       placeholder="口令"
@@ -299,17 +330,24 @@ export function Gate({ onUnlocked, onOpenSettings }: Props) {
                     />
                     <button
                       type="button"
-                      onClick={submitManual}
-                      className="press inline-flex shrink-0 items-center gap-1.5 rounded-[12px] px-4 text-[14px] font-bold text-white"
+                      onClick={() => void submitManual()}
+                      disabled={manualBusy}
+                      className="press inline-flex shrink-0 items-center gap-1.5 rounded-[12px] px-4 text-[14px] font-bold text-white disabled:opacity-50"
                       style={{ background: "var(--color-brand)" }}
                     >
-                      进入
-                      <ArrowRight size={16} />
+                      {manualBusy ? <Loader2 size={16} className="animate-spin" /> : null}
+                      {manualBusy ? "确认中" : "进入"}
+                      {manualBusy ? null : <ArrowRight size={16} />}
                     </button>
                   </div>
                   {manualError ? (
                     <p className="mt-2 text-[12.5px] font-semibold" style={{ color: "var(--color-brand-2)" }}>
                       口令不对，再试一次。
+                    </p>
+                  ) : null}
+                  {manualNote ? (
+                    <p className="mt-2 text-[12.5px] font-semibold" style={{ color: "#8a5a06" }}>
+                      {manualNote}
                     </p>
                   ) : null}
                 </div>

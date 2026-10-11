@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Heart, KeyRound, Loader2, ShieldAlert } from "lucide-react";
-import { checkPassword, gateChannel } from "../lib/gate";
+import { gateChannel } from "../lib/gate";
 import { errorText } from "../lib/errors";
 import { useStore } from "../lib/store";
+
+type State = "idle" | "checking" | "ok" | "wrong" | "locked" | "missing" | "error";
 
 export function PhoneGate({ sessionId }: { sessionId: string }) {
   const { cloudConfig, mode } = useStore();
   const [value, setValue] = useState("");
-  const [state, setState] = useState<"idle" | "checking" | "ok" | "wrong" | "error">("idle");
+  const [state, setState] = useState<State>("idle");
   const [message, setMessage] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -17,26 +19,52 @@ export function PhoneGate({ sessionId }: { sessionId: string }) {
 
   const submit = async () => {
     if (state === "checking" || state === "ok") return;
-    if (!checkPassword(value)) {
-      setState("wrong");
-      setValue("");
-      inputRef.current?.focus();
-      return;
-    }
-
     setState("checking");
+    setMessage("");
+
     try {
-      await gateChannel(cloudConfig).approve(sessionId);
-      setState("ok");
-      if (navigator.vibrate) navigator.vibrate(35);
+      const result = await gateChannel(cloudConfig).submit(sessionId, value);
+
+      if (result === "ok") {
+        setState("ok");
+        if (navigator.vibrate) navigator.vibrate(35);
+        return;
+      }
+      if (result === "wrong") {
+        setState("wrong");
+        setValue("");
+        inputRef.current?.focus();
+        return;
+      }
+      if (result === "locked") {
+        setState("locked");
+        return;
+      }
+      if (result === "missing") {
+        setState("missing");
+        return;
+      }
+      setState("error");
+      setMessage("服务端返回了意外结果");
     } catch (error) {
       setState("error");
       setMessage(errorText(error));
     }
   };
 
+  const retryable = state === "idle" || state === "checking" || state === "wrong" || state === "error";
+  const borderColor =
+    state === "wrong" || state === "error"
+      ? "var(--color-brand)"
+      : state === "locked"
+        ? "#c98a12"
+        : "var(--color-line)";
+
   return (
-    <div className="grid min-h-[100dvh] place-items-center px-5 py-10" style={{ background: "var(--color-canvas)" }}>
+    <div
+      className="grid min-h-[100dvh] place-items-center px-5 py-10"
+      style={{ background: "var(--color-canvas)" }}
+    >
       <div className="card rise-in w-full max-w-[420px] p-7">
         <div className="flex items-center gap-3">
           <span
@@ -70,7 +98,10 @@ export function PhoneGate({ sessionId }: { sessionId: string }) {
               输入口令，通过之后电脑那边会自动进入点名台。
             </p>
 
-            <label htmlFor="phone-pass" className="mt-5 mb-2 flex items-center gap-1.5 text-[13px] font-bold text-ink-2">
+            <label
+              htmlFor="phone-pass"
+              className="mt-5 mb-2 flex items-center gap-1.5 text-[13px] font-bold text-ink-2"
+            >
               <KeyRound size={14} />
               口令
             </label>
@@ -81,22 +112,38 @@ export function PhoneGate({ sessionId }: { sessionId: string }) {
               inputMode="numeric"
               autoComplete="off"
               value={value}
+              disabled={state === "locked" || state === "missing"}
               onChange={(event) => {
                 setValue(event.target.value);
-                if (state === "wrong") setState("idle");
+                if (state === "wrong" || state === "error") setState("idle");
               }}
               onKeyDown={(event) => {
                 if (event.key === "Enter") void submit();
               }}
-              aria-invalid={state === "wrong"}
-              className="w-full rounded-[14px] border bg-canvas px-4 py-3.5 text-center text-[22px] font-bold tracking-[0.4em] outline-none transition-colors focus:bg-paper"
-              style={{ borderColor: state === "wrong" ? "var(--color-brand)" : "var(--color-line)" }}
+              aria-invalid={state === "wrong" || state === "error"}
+              className="w-full rounded-[14px] border bg-canvas px-4 py-3.5 text-center text-[22px] font-bold tracking-[0.4em] outline-none transition-colors focus:bg-paper disabled:opacity-50"
+              style={{ borderColor }}
             />
 
             {state === "wrong" ? (
-              <p className="mt-2.5 flex items-center gap-1.5 text-[13px] font-semibold" style={{ color: "var(--color-brand-2)" }}>
+              <p
+                className="mt-2.5 flex items-center gap-1.5 text-[13px] font-semibold"
+                style={{ color: "var(--color-brand-2)" }}
+              >
                 <ShieldAlert size={14} />
                 口令不正确，再试一次。
+              </p>
+            ) : null}
+
+            {state === "locked" ? (
+              <p className="mt-2.5 text-[13px] font-semibold" style={{ color: "#8a5a06" }}>
+                试错次数太多了，这条扫码链接已失效。请在电脑上刷新页面重新生成二维码。
+              </p>
+            ) : null}
+
+            {state === "missing" ? (
+              <p className="mt-2.5 text-[13px] font-semibold" style={{ color: "#8a5a06" }}>
+                这个二维码已经过期或无效了。请在电脑上刷新页面，重新扫码。
               </p>
             ) : null}
 
@@ -115,7 +162,7 @@ export function PhoneGate({ sessionId }: { sessionId: string }) {
             <button
               type="button"
               onClick={() => void submit()}
-              disabled={!value.trim() || state === "checking"}
+              disabled={!value.trim() || !retryable}
               className="press mt-5 inline-flex w-full items-center justify-center gap-2 rounded-[14px] px-4 py-3.5 text-[16px] font-bold text-white transition-opacity disabled:opacity-40"
               style={{ background: "var(--color-brand)" }}
             >
