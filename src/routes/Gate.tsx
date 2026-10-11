@@ -8,6 +8,7 @@ import {
   Loader2,
   ScanLine,
   ShieldCheck,
+  Smartphone,
 } from "lucide-react";
 import { checkPassword, gateChannel, markUnlocked, newSessionId } from "../lib/gate";
 import { errorText } from "../lib/errors";
@@ -248,14 +249,22 @@ export function Gate({ onUnlocked, onOpenSettings }: Props) {
                   <p className="text-[12.5px] font-semibold leading-relaxed text-[#7a4a10]">
                     本机模式下二维码只在同一台设备有效，方便先看流程。连上云端之后，手机微信扫码才能真正通过。
                   </p>
-                  <button
-                    type="button"
-                    onClick={onOpenSettings}
-                    className="pill mt-2.5 !text-[12px]"
-                  >
-                    <Cloud size={13} />
-                    填写 Supabase 配置
-                  </button>
+                  <div className="mt-2.5 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        window.open(urlFor(`/gate?s=${sessionId}`), "_blank", "noopener,noreferrer")
+                      }
+                      className="pill !text-[12px]"
+                    >
+                      <Smartphone size={13} />
+                      在本机开一个手机端
+                    </button>
+                    <button type="button" onClick={onOpenSettings} className="pill !text-[12px]">
+                      <Cloud size={13} />
+                      填写 Supabase 配置
+                    </button>
+                  </div>
                 </div>
               ) : null}
             </>
